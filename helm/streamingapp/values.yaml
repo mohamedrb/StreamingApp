@@ -1,0 +1,22 @@
+frontend:
+  replicaCount: 2
+
+  image:
+    repository: YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/streamingapp-frontend
+    tag: "1.0"
+
+  service:
+    type: LoadBalancer
+    port: 80
+
+
+backend:
+  replicaCount: 2
+
+  image:
+    repository: YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/streamingapp-backend
+    tag: "1.0"
+
+  service:
+    type: ClusterIP
+    port: 5000
