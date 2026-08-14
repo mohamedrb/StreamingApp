@@ -1,138 +1,89 @@
 # StreamingApp
 
-Stream premium video content, host live watch parties, and manage your catalogue with a modern microservice architecture. The platform now ships with a production-ready admin portal, real-time chat, S3-backed adaptive streaming, and a redesigned cinematic frontend experience.
+### Step 1 — Fork the repository
 
-## Architecture
+### Step 2 - Create Dockerfiles
+      StreamingApp Frontend
+        ↓
+      streamingapp-frontend
+      
+      StreamingApp Backend
+              ↓
+      streamingapp-backend
 
-| Service | Port | Description |
-| --- | --- | --- |
-| `authService` | 3001 | User authentication, registration, JWT issuance |
-| `streamingService` | 3002 | Video catalogue, S3 playback endpoints, public APIs |
-| `adminService` | 3003 | Dedicated admin microservice for asset management and uploads |
-| `chatService` | 3004 | Websocket + REST chat for live watch parties |
-| `frontend` | 3000 | React SPA with revamped UI and integrated chat |
-| `mongo` | 27017 | Shared MongoDB instance |
+### Step 3 Build Docker images
+      docker build -t streamingapp-frontend:1.0 ./frontend
 
-All backend services share common database models and utilities through `backend/common`.
+      docker build -t streamingapp-backend:1.0 ./backend
 
-## Environment Configuration
+### Step 4 Test Docker containers
 
-Create an `.env` for each service (or export variables before running). All services accept the standard AWS credentials for S3 access.
+docker run -d `
+  --name streamingapp-backend `
+  -p 5000:5000 `
+  streamingapp-backend:1.0
 
-### Auth Service (`backend/authService/.env`)
-```ini
-PORT=3001
-MONGO_URI=mongodb://localhost:27017/streamingapp
-JWT_SECRET=changeme
-CLIENT_URLS=http://localhost:3000
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_REGION=ap-south-1
-AWS_S3_BUCKET=
-```
+### Step 5 Create ECR repositories
 
-### Streaming Service (`backend/streamingService/.env`)
-```ini
-PORT=3002
-MONGO_URI=mongodb://localhost:27017/streamingapp
-JWT_SECRET=changeme
-CLIENT_URLS=http://localhost:3000
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_REGION=ap-south-1
-AWS_S3_BUCKET=
-AWS_CDN_URL=
-STREAMING_PUBLIC_URL=http://localhost:3002
-```
+aws ecr create-repository `
+  --repository-name streamingapp-frontend `
+  --region ap-south-1
 
-### Admin Service (`backend/adminService/.env`)
-```ini
-PORT=3003
-MONGO_URI=mongodb://localhost:27017/streamingapp
-JWT_SECRET=changeme
-CLIENT_URLS=http://localhost:3000
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_REGION=ap-south-1
-AWS_S3_BUCKET=
-```
+aws ecr create-repository `
+  --repository-name streamingapp-backend `
+  --region ap-south-1
 
-### Chat Service (`backend/chatService/.env`)
-```ini
-PORT=3004
-MONGO_URI=mongodb://localhost:27017/streamingapp
-JWT_SECRET=changeme
-CLIENT_URLS=http://localhost:3000
-```
+### Step 6 Authenticate Docker with ECR
 
-### Frontend build variables (`frontend/.env` or Docker build args)
-```ini
-REACT_APP_AUTH_API_URL=http://localhost:3001/api
-REACT_APP_STREAMING_API_URL=http://localhost:3002/api
-REACT_APP_STREAMING_PUBLIC_URL=http://localhost:3002
-REACT_APP_ADMIN_API_URL=http://localhost:3003/api/admin
-REACT_APP_CHAT_API_URL=http://localhost:3004/api/chat
-REACT_APP_CHAT_SOCKET_URL=http://localhost:3004
-```
+aws sts get-caller-identity
 
-## Running with Docker Compose
+aws ecr get-login-password --region ap-south-1 |
+docker login --username AWS --password-stdin YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com
 
-1. Populate the environment variables above (or rely on the defaults baked into `docker-compose.yml`).
-2. Build and start the stack:
-   ```bash
-   docker-compose up --build
-   ```
-3. Navigate to `http://localhost:3000` for the web app.
+### Step 7 Tag images
 
-The compose file provisions MongoDB plus all four Node.js microservices. S3 credentials are optional for local testing—you can still browse seeded metadata, but streaming requires valid S3 objects.
+docker tag streamingapp-frontend:1.0 `
+YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/streamingapp-frontend:1.0
 
-## Local Development
+docker tag streamingapp-backend:1.0 `
+YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/streamingapp-backend:1.0
 
-Install dependencies for each service:
+docker push `
+YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/streamingapp-frontend:1.0
 
-```bash
-# auth service
-cd backend/authService && npm install
+docker push `
+YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/streamingapp-backend:1.0
 
-# streaming service
-cd ../streamingService && npm install
+### Step 8 AWS CLI
 
-# admin service
-cd ../adminService && npm install
+### Step 9 Create EKS
 
-# chat service
-cd ../chatService && npm install
+eksctl create cluster `
+  --name streamingapp-cluster `
+  --region ap-south-1 `
+  --nodes 2 `
+  --node-type t3.medium
 
-# frontend
-cd ../../frontend && npm install
-```
+### Step 10 Connect kubectl to EKS
 
-Run the services (in separate terminals) after starting MongoDB:
+aws eks update-kubeconfig `
+  --region ap-south-1 `
+  --name streamingapp-cluster
 
-```bash
-cd backend/authService && npm run dev
-cd backend/streamingService && npm run dev
-cd backend/adminService && npm run dev
-cd backend/chatService && npm run dev
-cd frontend && npm start
-```
+### Step 11 Create Helm char
 
-## Feature Highlights
+### Step 12 Jenkins
 
-- **S3-backed adaptive streaming** with secure signed uploads for admins.
-- **Dedicated admin microservice** for video ingestion, metadata management, and featured curation.
-- **Real-time chat** overlay in the player (Socket.IO + persistent message history).
-- **Modern React experience** featuring cinematic hero sections, dynamic carousels, and responsive design.
-- **Role-aware access control** across frontend routes and backend microservices.
+### Step 13 CloudWatch monitoring
 
-## Testing
+aws eks create-addon `
+  --cluster-name streamingapp-cluster `
+  --addon-name amazon-cloudwatch-observability `
+  --configuration-values '{"otelContainerInsights":{"enabled":true}}'
 
-Automated tests are not yet included. Recommended smoke checks:
+  aws eks describe-addon `
+  --cluster-name streamingapp-cluster `
+  --addon-name amazon-cloudwatch-observability `
+  --query "addon.status" `
+  --output text
 
-1. Register and log in through the web UI.
-2. Upload a small video + thumbnail via the admin dashboard (requires valid S3 credentials).
-3. Confirm playback from the browse page and verify that chat messages broadcast between multiple browser tabs.
-
-## License
-
-MIT © StreamFlix Team
